@@ -1,0 +1,8 @@
+_Archive
+cache_pretrained
+R
+node_modules
+*.pyc
+__pycache__
+.*
+!.gitignore
