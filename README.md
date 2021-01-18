@@ -1,10 +1,9 @@
-# Sentiment Analysis Prototype
-This project is a Cloudera Machine Learning 
+# Sentiment Analysis of the Simpsons Dialogue
+_Note:_ This project is derived from [this](https://www.cloudera.com/about/events/webinars/build-a-sentiment-analysis-application-in-cdp.html) Cloudera Machine Learning 
 ([CML](https://www.cloudera.com/products/machine-learning.html)) **Applied Machine Learning 
-Project Prototype**. It has all the code and data needed to deploy an end-to-end machine 
-learning project in a running CML instance.
+Project Prototype** project. It's a bit less CML specific and drops the python parts.
 
-![frink](images/frink.jpg)
+![frink agrees](images/frink.jpg)
 
 Images Source: https://toddwschneider.com/posts/the-simpsons-by-the-data/
 

@@ -1,24 +1,20 @@
 ---
-title: "Data Analysis of Simpsons Dialogue"
+title: "Data Analysis R-Notebook"
 output:
   html_document:
     df_print: paged
 ---
-# R Code Part 1: Data Analysis
-*a.k.a: Who is the happiest Simpons Character?*. This R Notebook will show how to create
+## Data Analysis of Simpsons Dialogue
+*a.k.a: Who is the happiest Simpsons Character?* 
+
+This R Notebook will show how to create
 a labeled sentiment data set for the dialogue from the Simpsons TV show. It will 
 help you work out which of the Simpsons characters is the happiest based on this analysis. 
 This is more about showing the process than being as accurate as 
 possible, but going through the list at the end it seems like a reasonable outcome. 
 
-![Professor Frink](images/frink.jpg)
-
-source https://toddwschneider.com/posts/the-simpsons-by-the-data/
-
-The data set for this comes from Kaggle and you can see ithere: https://www.kaggle.com/pierremegret/dialogue-lines-of-the-simpsons
+The data set for this comes from Kaggle and you can see it here: https://www.kaggle.com/pierremegret/dialogue-lines-of-the-simpsons
 The data set is quite small and it has been included with the repo. 
-
-CML Note: Make sure you have run the 0_bootstrap.py script at the start to upload the data to the object storage and to set the `STORAGE` environment variable. 
 
 This project uses the `dplyr`, `sparklyr`, and `ggplot2` packages. There is a weird issue with CRAN and installing `sparklyr` at the moment, so if you install things in the following order, it will work.
 ```
@@ -39,21 +35,39 @@ library(ggthemes)
 
 #### Create the Spark connection
 ```{r}
-#storage <- Sys.getenv("STORAGE")
+config <- spark_config()
+config$spark.driver.memory <- "8g"
+config$spark.master <- "local" #This is here because the master='local' in the spark_connect function is having issues. If you're running on your local machine, you shouldn't need it.
+config$`sparklyr.cores.local` <- 2
+config$`sparklyr.shell.driver-memory` <- "8G"
+config$spark.memory.fraction <- 0.9
 
-#config <- spark_config()
-#config$spark.executor.memory <- "4g"
-#config$spark.executor.instances <- "3"
-#config$spark.executor.cores <- "4"
-#config$spark.driver.memory <- "2g"
+# If you want to run in distributed mode, uncomment these lines and change master = 'local' to 
+# master = 'yarn-client'. Both above for the config parameter and below in the in 
+# spark_connect function.
+
+#config$spark.executor.memory <- "8g"
+#config$spark.executor.cores <- "2"
+
+# If you're running this on CML in distributed mode, uncomment the following and make 
+# sure your project has environment variable named STORAGE that points to the right
+# hive warehouse storage location. 
+# See: https://github.com/fastforwardlabs/cml_churn_demo_mlops/blob/master/0_bootstrap.py
+
+#storage <- Sys.getenv("STORAGE")
 #config$spark.yarn.access.hadoopFileSystems <- storage
-sc <- spark_connect(master = "local")#"yarn-client", config=config)
+
+sc <- spark_connect(master="local", config = config)
+
+# Also for CML, the following will give you the URL to the Spark UI to open in a new Window
+# paste("http://spark-",Sys.getenv("CDSW_ENGINE_ID"),".",Sys.getenv("CDSW_DOMAIN"),sep="")
 ```
 ### Read in the CSV data
-The text data is a very simple data set. Its 2 columns, one for the character, and on for their
+The text data is a very simple data set. Its 2 columns, one for the character, and one for their
 dialog. Since we know that its 2 columns of `characters` we will set the schema and save
 spark the trouble of doing it automatically with `infer_schema`
 
+Here is some sample data.
 ```
 Miss Hoover,"No, actually, it was a little of both. Sometimes when a disease is in all he magazines and all the news shows, it's nly natural that you think you have it."
 Lisa Simpson,Where's Mr. Bergstrom?
@@ -80,7 +94,7 @@ spark_read_csv(
 ```
 
 The other data set we will use is the AFINN list. https://github.com/fnielsen/afinn/tree/master/afinn/data 
-its 2 column, the first being the word and the second and integer value for its `valance`, i.e. positive vs
+Its 2 columns, the first being the word and the second and integer value for its `valance`, i.e. positive vs
 negative words.
 
 ```
@@ -100,7 +114,9 @@ spark_read_csv(
 )
 ```
 #### Create local references for the Spark tables.
-Once the spark dataframes have been read in, we need a local reference for them to use with `dplyr` verbs.
+Once the spark dataframes have been read in, we need a local reference for them to use with `dplyr`
+verbs. You can also just assign the local reference to the read using 
+`my_clever_var_name <- spark_read_csv(` etc.
 
 ```{r}
 afinn_table <- tbl(sc, "afinn_table")
@@ -109,37 +125,38 @@ afinn_table <- afinn_table %>% rename(word = V1, value = V2)
 simpsons_spark_table <- tbl(sc, "simpsons_spark_table")
 
 as.data.frame(head(simpsons_spark_table))
-  
+```
+```{r}
 simpsons_spark_table %>% count()
 ```
-This shows us there are 158314 lines of dialogue in the text corpus. 
+This shows us there are 158314 lines of dialogue in the text corpus.
 
-#### Basic data cleaning
-The first to do is renaming a column to make type it out easier as we go. Its a huge improvement really
-and it makes me happy, so there. 
+#### Basic Data Cleaning
+The first to do is renaming a column to make type it out easier as we go. Its not a huge 
+improvement really and it makes me happy, so there. 
 ```{r}
 simpsons_spark_table <- 
   simpsons_spark_table %>% 
   rename(raw_char = raw_character_text)
 ```
 
-Droping null / NA values
+Dropping null / NA values
 ```{r}
 simpsons_spark_table <- 
   simpsons_spark_table %>% 
   na.omit()
 ```
-#### Show the top speakers
+#### Top Speakers
 This table shows the number of lines spoken by each character.
 
 ```{r}
 simpsons_spark_table %>% group_by(raw_char) %>% count() %>% arrange(desc(n))
 ```
 ## Text Mining
-In this section, we need to start processing the text to get it into a numeric format that a classificantion
+In this section, we need to start processing the text to get it into a numeric format that a classifier
 model can use. There is a lot of good detail on how to do that using sparklyr  [here](https://spark.rstudio.com/guides/textmining/) and this section uses a lot of those functions.
 
-#### Remove punctuation
+#### Remove Punctuation
 Punctuation is removed using the Hive UDF `regexp_replace`.
 ```{r}
 simpsons_spark_table <- 
@@ -147,33 +164,38 @@ simpsons_spark_table <-
   mutate(spoken_words = regexp_replace(spoken_words, "\'", "")) %>%
   mutate(spoken_words = regexp_replace(spoken_words, "[_\"():;,.!?\\-]", " "))
 ```
+
 #### Tokenize
-Tokenizing seperates the sentences into individual words. 
+Tokenizing separates the sentences into a list of individual words. 
 ```{r}
 simpsons_spark_table <- 
   simpsons_spark_table %>% 
   ft_tokenizer(input_col="spoken_words",output_col= "word_list")
 ```
-#### Remove stop words
+
+#### Remove Stop Words
 Remove the smaller, commonly used words that don't add relevance for sentiment like "and" and "the".
 ```{r}
 simpsons_spark_table <- 
   simpsons_spark_table %>% 
   ft_stop_words_remover(input_col = "word_list", output_col = "wo_stop_words")
 ```
-#### Write these to Hive to use later
-We will need both of these dataframes for the model training section, so we will write them both to Hive here.
+
+#### Write to Hive (optional)
+We might need both of these dataframes for use later, so in CML you can write both tables to 
+the default Hive database.
 ```{r}
 #spark_write_table(simpsons_spark_table,"simpsons_spark_table",mode = "overwrite")
 #spark_write_table(afinn_table,"afinn_table",mode = "overwrite")
 ```
 
-## So who is the happiest Simpson?
+## So Who is the Happiest Simpson?
 This part is where there could be some debate about the best approach. Ideally each of the 158000 
-lines of dialoge should be labelled by an actual human in the context of the show to get a valid data set. 
-But who has the time or money for that? So lets take a different approach. First we take each of the tokenized
-sentences and use the Hive UDF `explode` to put each word into its own row, but still with its associated
-line of dialogue. (_Note:_ We're only do this for sentences of more than 2 words.)
+lines of dialogue should be labeled by an actual human in the context of the show to get a valid 
+data set. But who has the time or money for that? So lets take a different approach. First we 
+take each of the tokenized sentences and use the Hive UDF `explode` to put each word into its own 
+row, but still with its associated line of dialogue. 
+(_Note:_ We're only do this for sentences of more than 2 words.)
 
 ```{r}
 sentences <- simpsons_spark_table %>%  
@@ -185,8 +207,8 @@ sentences <- simpsons_spark_table %>%
 sentences
 ```
 
-Then we use the AFINN table assign a numeric value to words that have corresponding value 
-in the table using an `inner_join`. These values are grouped back together and summed to then
+Then we use the AFINN table to assign a numeric value to each word that has a corresponding value 
+in the table using an `inner_join`. These values are grouped back together and summed to 
 give each line of dialogue an integer value.
 
 ```{r}
@@ -214,10 +236,10 @@ density_plot <- function(X) {
 }
 density_plot(as.data.frame(sentence_values %>% select(weighted_sum))$weighted_sum)
 ```
-What is interesting about the above graph is how the distribution of the weighted_sum calcuation is not 
-normal but more bimodal.
+What is interesting about the above graph is how the distribution of the weighted_sum calculation is 
+not normal but more bimodal. This lends itself to a Positive / Negative sentiment classification.
 
-#### Calculate the total sentiment values per character
+#### Calculate Sentiment Values by Character
 This is repeating some of the steps above, but restricting it to the top 30 characters by number of lines of dialogue.
 ```{r}
 simpsons_final_words <- simpsons_spark_table %>%  mutate(word = explode(wo_stop_words)) %>%
@@ -234,10 +256,11 @@ top_chars <- simpsons_final_words %>%
 
 top_chars <- as.vector(top_chars$raw_char)
 ```
+
 ## Sentiment Analysis
 This repeats the AFINN word list `inner_join` process but this time for words by character
-in the top 30 list. Also the AFINN value is summed and then weighted according to number of words spoken rather 
-just the raw value at that would push those who say the most to the top.
+in the top 30 list. Also the AFINN value is summed and then weighted according to number of 
+words spoken rather just the raw value at that would push those who say the most to the top.
 
 ```{r}
 happiest_characters <- simpsons_final_words %>% 
@@ -248,13 +271,13 @@ happiest_characters <- simpsons_final_words %>%
   arrange(desc(weighted_sum)) %>% 
   as.data.frame()
 ```
-
-And there we have the results. The happiest Character is Lenny Leornard. I was suprised it wasn't Ned, but he's
-up there and there and this project could be done using different approaches that could have him higher up
-the list.
 ```{r}
 happiest_characters
 ```
+
+And here we have the results. The happiest Character is Lenny Leonard. I was surprised it wasn't 
+Ned, but he's up there and there and this project could be done using different approaches that 
+could have him higher up the list.
 
 ```{r}
 p <-
