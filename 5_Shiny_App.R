@@ -1,7 +1,8 @@
-## Part 4: Shiny Application
-### Using the Application
-# After the Application deploys, click on the blue-arrow next to the name to launch the 
-# applicatio. This application is self explanitory, type in a sentence and choose which model
+## 5 Shiny Application
+# 
+# This script will run a Shiny application (https://shiny.rstudio.com/) that can
+# take a new sentence and make a sentiment prediction using either the Word2Vec or BERT
+# model. This application is self explanatory, type in a sentence and choose which model
 # to send it to to get a sentiment prediction back.
 
 library(jsonlite)
@@ -22,16 +23,21 @@ config$spark.memory.fraction <- 0.9
 
 sc <- spark_connect(master="local", config = config)
 
+# Load all the transformation pipelines and the logistic regression models.
+# Note: These are a bit too big for github, so the models need to be built
+# using the `3_Word2vec_model.R` and `4_Bert_Model.R` scripts.
+
 pipeline_w2v <- ml_load(sc,"models/pipeline_w2v/")
 lr_model_w2v <- ml_load(sc,"models/lr_model_w2v/")
 
 pipeline_bert <- ml_load(sc,"models/pipeline_bert/")
 lr_model_bert <- ml_load(sc,"models/lr_model_bert/")
 
-#sentence = "I was born an oaf and I'll die an oaf"
 
-result <- ""
-
+# This function will make a new prediction based on the input sentence.
+# It takes the sentence, creates a single-row spark data frame, and runs
+# the chosen models' `ml_transform` and `ml_predict` function on 
+# the sentence and returns the predict class and the the confidence level.
 
 get_result <- function (sentence, model) {
 
@@ -57,6 +63,8 @@ get_result <- function (sentence, model) {
          
 }
 
+# The 2 functions below (`app` and `server`) are basic implementations needed to create
+# a Shiny application. See the Shiny docs for 
 
 app <- shinyApp(ui <- fluidPage(
   titlePanel("Sentiment Analysis Model Application"),
@@ -91,4 +99,10 @@ server <- function(input, output) {
   })
 })
 
+
+# The port number and other settings in the `runApp` below are specific to make it work
+# on CML. To run it yourself, just uncomment the line below and comment the one
+# below that.
+
+#runApp(app, port = 8080)
 runApp(app, port = as.numeric(Sys.getenv("CDSW_READONLY_PORT")), host = "127.0.0.1", launch.browser = "FALSE")

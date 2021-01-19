@@ -9,8 +9,11 @@ now pretty much all done with [sparklyr](https://spark.rstudio.com)
 Images Source: https://toddwschneider.com/posts/the-simpsons-by-the-data/
 
 ## Project Overview
-Ever wondered who the happiest Simpsons character is, and what you can do once armed with that
-knowledge? This project is for you!
+Ever wondered who the happiest Simpsons character is and what you can do once armed with that
+knowledge? This project is for you! 
+
+*Note:* There is a lot of supporting info and documentation in each of the project files, so it's
+worth taking a look through the files.
 
 This project is 2 main parts:
 1. Data Analysis

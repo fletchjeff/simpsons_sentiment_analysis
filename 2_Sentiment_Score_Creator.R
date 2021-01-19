@@ -99,15 +99,15 @@ sentence_values
 # options presented to below are:
 #
 #### 1 - Create a binary label
-# Find the average for each sentence and if its above, treat it as positive and 
+# Find the average (mean) for each sentence and if its above, treat it as positive and 
 # if its below, treat it as negative
 #
 #### 2 - Create multiclass labels
 # The histogram in the 1_Data_Analysis.Rmd file shows a bimodal like distribution, with the peaks
-# at -2 and 2. So we can create 3 labels: "negative" for values below -2, "neutral" from -2 to 2 and 
-# "positive" for values above 2. Many of the values are exactly -2 or 2, so you can change the code
-# below and make the '>' and '<' into '>=' and '<=' rather and see what difference it makes
-# to the models.
+# at -2 and 2. So we can create 3 labels: "negative" for values below -2, "neutral" from -2 to 2 
+# and "positive" for values above 2. Many of the values are exactly -2 or 2, so you can change 
+# the code # below and make the '>' and '<' into '>=' and '<=' rather and see what difference 
+# it makes to the models.
 
 
 weighted_sum_summary <- sentence_values %>% sdf_describe(cols="weighted_sum")
@@ -118,7 +118,7 @@ sentence_scores <- sentence_values %>%
   mutate(sent_binary = ifelse(weighted_sum > weighted_sum_mean,"positive","negative")) %>%
   mutate(sent_multi = ifelse(weighted_sum > 2,"positive",ifelse(weighted_sum < -2,"negative","neutral")))
 
-# We need to use this data for the 2 models we're going to build, so lets write it out to a parquet
-# file. Why parquet, because its better than CSV, always.
+# We need to use this data for the 2 models we're going to build, so lets write it out to a 
+# parquet file. Why parquet? Because its better than CSV, always.
 
 spark_write_parquet(sdf_coalesce(sentence_scores,1),"data/sentence_scores",mode="overwrite")
