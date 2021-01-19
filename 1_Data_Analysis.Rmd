@@ -288,3 +288,6 @@ p <-
   coord_flip()
 p
 ```
+
+We should have known really.
+![Horray for Lenny](images/lenny.jpg)
